@@ -45,16 +45,81 @@ void gemm_cpu_o0(float* A, float* B, float *C, int M, int N, int K) {
 // Your optimized implementations go here
 // note that for o4 you don't have to change the code, but just the compiler flags. So, you can use o3's code for that part
 void gemm_cpu_o1(float* A, float* B, float *C, int M, int N, int K) {
-
+	for (int i = 0; i < M; i++) {
+		for (int k = 0; k < K; k++) {
+			float a_val = A[i * K + k];
+			for (int j = 0; j < N; j++) {
+				C[i * N + j] += a_val * B[k * N + j];
+			}
+		}
+	}
 }
 
 void gemm_cpu_o2(float* A, float* B, float *C, int M, int N, int K) {
+	int tile_size = 32;
 
+	for (int i = 0; i < M; i += tile_size) {
+		for (int k = 0; k < K; k += tile_size) {
+			for (int j = 0; j < N; j += tile_size) {
+				int i_max = std::min(i + tile_size, M);
+				int k_max = std::min(k + tile_size, K);
+				int j_max = std::min(j + tile_size, N);
+				for (int i_inner = i; i_inner < i_max; i_inner++) {
+					for (int k_inner = k; k_inner < k_max; k_inner++) {
+						float a_val = A[i_inner * K + k_inner];
+						for (int j_inner = j; j_inner < j_max; j_inner++) {
+							C[i_inner * N + j_inner] += a_val * B[k_inner * N + j_inner];
+						}
+					}
+				}
+			}
+		}
+	}
 }
 
 void gemm_cpu_o3(float* A, float* B, float *C, int M, int N, int K) {
-
+	int tile_size = 32;
+	#pragma omp parallel for
+	for (int i = 0; i < M; i += tile_size) {
+		for (int k = 0; k < K; k += tile_size) {
+			for (int j = 0; j < N; j += tile_size) {
+				int i_max = std::min(i + tile_size, M);
+				int k_max = std::min(k + tile_size, K);
+				int j_max = std::min(j + tile_size, N);
+				for (int i_inner = i; i_inner < i_max; i_inner++) {
+					for (int k_inner = k; k_inner < k_max; k_inner++) {
+						float a_val = A[i_inner * K + k_inner];
+						for (int j_inner = j; j_inner < j_max; j_inner++) {
+							C[i_inner * N + j_inner] += a_val * B[k_inner * N + j_inner];
+						}
+					}
+				}
+			}
+		}
+	}
 }
+void gemm_cpu_o4(float* A, float* B, float *C, int M, int N, int K) {
+	int tile_size = 32;
+#pragma omp parallel for
+	for (int i = 0; i < M; i += tile_size) {
+		for (int k = 0; k < K; k += tile_size) {
+			for (int j = 0; j < N; j += tile_size) {
+				int i_max = std::min(i + tile_size, M);
+				int k_max = std::min(k + tile_size, K);
+				int j_max = std::min(j + tile_size, N);
+				for (int i_inner = i; i_inner < i_max; i_inner++) {
+					for (int k_inner = k; k_inner < k_max; k_inner++) {
+						float a_val = A[i_inner * K + k_inner];
+						for (int j_inner = j; j_inner < j_max; j_inner++) {
+							C[i_inner * N + j_inner] += a_val * B[k_inner * N + j_inner];
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
 
 
 int main(int argc, char* argv[]) {
@@ -85,12 +150,15 @@ int main(int argc, char* argv[]) {
 	CHECK(gemm_cpu_o1)
 	CHECK(gemm_cpu_o2)
 	CHECK(gemm_cpu_o3)
+	CHECK(gemm_cpu_o4)
+
 	delete[] refC;
 	
 	TIME(gemm_cpu_o0)
 	TIME(gemm_cpu_o1)
 	TIME(gemm_cpu_o2)
 	TIME(gemm_cpu_o3)
+	TIME(gemm_cpu_o4)
 
 	delete[] A;
 	delete[] B;
