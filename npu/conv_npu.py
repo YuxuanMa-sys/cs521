@@ -70,10 +70,9 @@ def conv2d(X, W, bias):
     n_tiles_c_out = out_channels // c_out_pmax
 
     # two output rows at one time ('chunk')
-    chunk_size = 16
+    chunk_size = 2
     input_rows = chunk_size + filter_height - 1
     num_chunks = math.ceil(input_height/chunk_size)
-
     # print('input height:', input_height)
     # print('output height:', out_height)
     # print('number of chunks:', num_chunks)
@@ -143,19 +142,21 @@ def conv2d(X, W, bias):
                     dtype=X.dtype,
                     buffer=nl.sbuf
                 )
+                result = nl.zeros((nl.par_dim(c_out_pmax), chunk_size, out_width), nl.float32, buffer=nl.psum)
+                for i in nl.affine_range(filter_height):
+                    for j in nl.affine_range(filter_width):
+                        for c_in in nl.affine_range(n_tiles_c_in):
+                            result += nisa.nc_matmul(
+                                w[i, j, c_out, c_in, :, :],
+                                x[n, c_in, :, i : chunk_size + i, j : j + out_width]
+                            )
 
-                for row_count in nl.affine_range(chunk_size):
 
-                    result = nl.zeros((c_out_pmax, out_width), nl.float32, buffer=nl.psum)
-                    for i in nl.affine_range(filter_height):
-                        for j in nl.affine_range(filter_width):
-                            for c_in in nl.affine_range(n_tiles_c_in):
-                                result += nisa.nc_matmul(
-                                    w[i, j, c_out, c_in, :, :],
-                                    x[n, c_in, :, row_count + i, j:j + out_width]
-                                )
+                # for row_count in nl.affine_range(chunk_size):
+
+                    # print(output_val.shape)
                     # add bias
-                    output_val[:, row_count, :] = nl.add(result, bias_loaded[:, c_out])
+                output_val[:, :, :] = nl.add(result, bias_loaded[:, c_out])
 
                 i_p, i_r, i_c = nl.mgrid[0:c_out_pmax, 0:chunk_size, 0:out_width]
                 nl.store(X_out[b, c_out * c_out_pmax + i_p, n * chunk_size + i_r, i_c], output_val[i_p, i_r, i_c],mask = n * chunk_size + i_r < out_height)
